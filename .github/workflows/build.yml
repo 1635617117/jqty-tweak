@@ -29,6 +29,9 @@ jobs:
           mkdir -p .theos/obj/debug/arm64
           clang++ -arch arm64 \
             -isysroot "$SDK" \
+            -I/opt/theos/include \
+            -I/opt/theos/vendor/include \
+            -include /opt/theos/Prefix.pch \
             -miphoneos-version-min=15.0 \
             -dynamiclib \
             -install_name /Library/MobileSubstrate/DynamicLibraries/JQTYPacketLog.dylib \
