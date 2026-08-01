@@ -54,9 +54,6 @@ jobs:
           echo "Compilation exit code: $?"
           ls -la .theos/obj/debug/arm64/JQTYPacketLog.dylib
           file .theos/obj/debug/arm64/JQTYPacketLog.dylib
-          echo "Compilation exit code: $?"
-          ls -la .theos/obj/debug/arm64/JQTYPacketLog.dylib
-          file .theos/obj/debug/arm64/JQTYPacketLog.dylib
 
       - name: Upload dylib
         uses: actions/upload-artifact@v4
