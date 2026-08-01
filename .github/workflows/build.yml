@@ -13,53 +13,38 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Theos
-        env:
-          THEOS: /opt/theos
         run: |
+          sudo git clone --recursive --depth 1 https://github.com/theos/theos.git /opt/theos
           echo "THEOS=/opt/theos" >> $GITHUB_ENV
-          sudo git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
 
-      - name: Build
-        env:
-          THEOS: /opt/theos
-        run: |
-          # Use Xcode SDK directly
-          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-          echo "Using SDK: $SDK_PATH"
-          # Patch Makefile target to use Xcode SDK
-          make clean 2>/dev/null || true
-          make package \
-            SDKVERSION=17.0 \
-            TARGET=iphone:clang:15.0:15.0 \
-            ARCHS=arm64 \
-            PACKAGE_FORMAT=none \
-            THEOS_PACKAGE_SCHEME= \
-            SYSROOT=$SDK_PATH \
-            PREFIX=$THEOS/toolchain/linux/iphone \
-            FINALPACKAGE=1 \
-            2>&1 || make -f Makefile dylib 2>&1 || echo "Standard build failed, trying manual approach"
-
-      - name: Manual compile fallback
-        if: failure()
-        env:
-          THEOS: /opt/theos
+      - name: Compile dylib
         run: |
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          mkdir -p .theos/obj/debug/arm64/
-          clang -arch arm64 \
-            -isysroot $SDK \
+          echo "SDK: $SDK"
+          mkdir -p .theos/obj/debug/arm64
+          clang++ -arch arm64 \
+            -isysroot "$SDK" \
             -miphoneos-version-min=15.0 \
             -dynamiclib \
-            -F $SDK/System/Library/Frameworks \
+            -install_name /Library/MobileSubstrate/DynamicLibraries/JQTYPacketLog.dylib \
+            -F "$SDK/System/Library/Frameworks" \
+            -F "$SDK/System/Library/PrivateFrameworks" \
             -framework Foundation \
             -framework Security \
             -framework CFNetwork \
+            -framework UIKit \
             -lsubstrate \
             -lobjc \
             -ObjC \
             -fobjc-arc \
+            -fobjc-abi-version=2 \
+            -std=c++11 \
+            -Wno-deprecated-declarations \
             -o .theos/obj/debug/arm64/JQTYPacketLog.dylib \
-            Tweak.xm 2>&1
+            Tweak.xm
+          echo "Compilation exit code: $?"
+          ls -la .theos/obj/debug/arm64/JQTYPacketLog.dylib
+          file .theos/obj/debug/arm64/JQTYPacketLog.dylib
 
       - name: Upload dylib
         uses: actions/upload-artifact@v4
@@ -68,4 +53,4 @@ jobs:
           path: |
             .theos/obj/debug/arm64/JQTYPacketLog.dylib
             *.plist
-          if-no-files-found: warn
+          if-no-files-found: error
