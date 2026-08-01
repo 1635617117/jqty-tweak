@@ -1,0 +1,71 @@
+name: Build JQTYPacketLog
+
+on:
+  push:
+    branches: [master, main]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Theos
+        env:
+          THEOS: /opt/theos
+        run: |
+          echo "THEOS=/opt/theos" >> $GITHUB_ENV
+          sudo git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
+
+      - name: Build
+        env:
+          THEOS: /opt/theos
+        run: |
+          # Use Xcode SDK directly
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "Using SDK: $SDK_PATH"
+          # Patch Makefile target to use Xcode SDK
+          make clean 2>/dev/null || true
+          make package \
+            SDKVERSION=17.0 \
+            TARGET=iphone:clang:15.0:15.0 \
+            ARCHS=arm64 \
+            PACKAGE_FORMAT=none \
+            THEOS_PACKAGE_SCHEME= \
+            SYSROOT=$SDK_PATH \
+            PREFIX=$THEOS/toolchain/linux/iphone \
+            FINALPACKAGE=1 \
+            2>&1 || make -f Makefile dylib 2>&1 || echo "Standard build failed, trying manual approach"
+
+      - name: Manual compile fallback
+        if: failure()
+        env:
+          THEOS: /opt/theos
+        run: |
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          mkdir -p .theos/obj/debug/arm64/
+          clang -arch arm64 \
+            -isysroot $SDK \
+            -miphoneos-version-min=15.0 \
+            -dynamiclib \
+            -F $SDK/System/Library/Frameworks \
+            -framework Foundation \
+            -framework Security \
+            -framework CFNetwork \
+            -lsubstrate \
+            -lobjc \
+            -ObjC \
+            -fobjc-arc \
+            -o .theos/obj/debug/arm64/JQTYPacketLog.dylib \
+            Tweak.xm 2>&1
+
+      - name: Upload dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: JQTYPacketLog-dylib
+          path: |
+            .theos/obj/debug/arm64/JQTYPacketLog.dylib
+            *.plist
+          if-no-files-found: warn
