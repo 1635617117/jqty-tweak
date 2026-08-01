@@ -1,4 +1,8 @@
-#import <substrate.h>
+// Substrate hooks 函数声明 (替代 substrate.h, 避免 MAC 编译环境缺失 CydiaSubstrate)
+extern "C" {
+    void MSHookFunction(void *symbol, void *replace, void **result);
+    void MSHookMessageEx(Class cls, SEL sel, IMP imp, IMP *result);
+}
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
 #import <CommonCrypto/CommonCrypto.h>
