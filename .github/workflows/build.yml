@@ -3,6 +3,7 @@ name: Build JQTYPacketLog
 on:
   push:
     branches: [master, main]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -15,8 +16,7 @@ jobs:
       - name: Compile dylib
         run: |
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          echo "SDK: $SDK"
-          mkdir -p .theos/obj/debug/arm64
+          mkdir -p build
           clang++ -arch arm64 \
             -isysroot "$SDK" \
             -miphoneos-version-min=15.0 \
@@ -35,17 +35,15 @@ jobs:
             -Wl,-U,_MSHookFunction \
             -Wl,-U,_MSHookMessageEx \
             -Wl,-undefined,dynamic_lookup \
-            -o .theos/obj/debug/arm64/JQTYPacketLog.dylib \
+            -o build/JQTYPacketLog.dylib \
             Tweak.mm
-          echo "Compilation exit code: $?"
-          ls -la .theos/obj/debug/arm64/JQTYPacketLog.dylib
-          file .theos/obj/debug/arm64/JQTYPacketLog.dylib
+          echo "=== Build done ==="
+          ls -la build/JQTYPacketLog.dylib
+          file build/JQTYPacketLog.dylib
 
       - name: Upload dylib
         uses: actions/upload-artifact@v4
         with:
           name: JQTYPacketLog-dylib
-          path: |
-            .theos/obj/debug/arm64/JQTYPacketLog.dylib
-            *.plist
+          path: build/JQTYPacketLog.dylib
           if-no-files-found: error
