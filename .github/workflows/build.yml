@@ -21,6 +21,11 @@ jobs:
         run: |
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           echo "SDK: $SDK"
+          
+          # Preprocess .xm Logos file to .mm Objective-C++
+          perl /opt/theos/bin/logos.pl Tweak.xm > Tweak.mm
+          echo "=== Logos preprocessing done ==="
+          
           mkdir -p .theos/obj/debug/arm64
           clang++ -arch arm64 \
             -isysroot "$SDK" \
@@ -42,7 +47,10 @@ jobs:
             -Wl,-U,_MSHookMessageEx \
             -Wl,-undefined,dynamic_lookup \
             -o .theos/obj/debug/arm64/JQTYPacketLog.dylib \
-            Tweak.xm
+            Tweak.mm
+          echo "Compilation exit code: $?"
+          ls -la .theos/obj/debug/arm64/JQTYPacketLog.dylib
+          file .theos/obj/debug/arm64/JQTYPacketLog.dylib
           echo "Compilation exit code: $?"
           ls -la .theos/obj/debug/arm64/JQTYPacketLog.dylib
           file .theos/obj/debug/arm64/JQTYPacketLog.dylib
