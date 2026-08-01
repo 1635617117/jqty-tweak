@@ -1,0 +1,9 @@
+Package: com.jqty.packetlog
+Name: JQTYPacketLog
+Version: 1.0
+Architecture: iphoneos-arm
+Description: 鲸奇体育抓包日志 dylib - Hook SSLRead/SSLWrite 捕获解密数据, 绕过 SSL Pinning, 写入本地文件
+Maintainer: dev
+Author: dev
+Section: Tweaks
+Depends: mobilesubstrate (>= 0.9.5000), firmware (>= 15.0)

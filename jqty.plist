@@ -1,0 +1,6 @@
+{
+    Filter = {
+        Bundles = (com.jingqitiyu.sports.jqty);
+        Executables = (UNIF407B7B);
+    };
+}
