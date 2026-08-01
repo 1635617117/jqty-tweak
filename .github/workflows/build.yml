@@ -12,20 +12,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Theos
-        run: |
-          sudo git clone --recursive --depth 1 https://github.com/theos/theos.git /opt/theos
-          echo "THEOS=/opt/theos" >> $GITHUB_ENV
-
       - name: Compile dylib
         run: |
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           echo "SDK: $SDK"
-          
-          # Preprocess .xm Logos file to .mm Objective-C++
-          perl /opt/theos/bin/logos.pl Tweak.xm > Tweak.mm
-          echo "=== Logos preprocessing done ==="
-          
           mkdir -p .theos/obj/debug/arm64
           clang++ -arch arm64 \
             -isysroot "$SDK" \
@@ -40,7 +30,6 @@ jobs:
             -lobjc \
             -ObjC \
             -fobjc-arc \
-            -fobjc-abi-version=2 \
             -x objective-c++ \
             -Wno-deprecated-declarations \
             -Wl,-U,_MSHookFunction \
