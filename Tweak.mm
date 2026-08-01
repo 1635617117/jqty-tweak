@@ -103,10 +103,12 @@ static void writeToLog(NSString *direction, NSData *payload) {
     });
 }
 
-// ========== 1. SSLRead Hook ==========
+// ========== 1. SSLRead/SSLWrite Hook (动态获取避免 SDK26 签名冲突) ==========
 
-typedef OSStatus (*SSLReadFunc)(SSLContextRef context, void *data, size_t dataLength, size_t *processed);
-static SSLReadFunc orig_SSLRead;
+typedef OSStatus (*SSLReadFunc_t)(SSLContextRef, void *, size_t, size_t *);
+typedef OSStatus (*SSLWriteFunc_t)(SSLContextRef, const void *, size_t, size_t *);
+static SSLReadFunc_t orig_SSLRead;
+static SSLWriteFunc_t orig_SSLWrite;
 
 static OSStatus hooked_SSLRead(SSLContextRef context, void *data, size_t dataLength, size_t *processed) {
     OSStatus ret = orig_SSLRead(context, data, dataLength, processed);
@@ -116,11 +118,6 @@ static OSStatus hooked_SSLRead(SSLContextRef context, void *data, size_t dataLen
     }
     return ret;
 }
-
-// ========== 2. SSLWrite Hook ==========
-
-typedef OSStatus (*SSLWriteFunc)(SSLContextRef context, const void *data, size_t dataLength, size_t *processed);
-static SSLWriteFunc orig_SSLWrite;
 
 static OSStatus hooked_SSLWrite(SSLContextRef context, const void *data, size_t dataLength, size_t *processed) {
     if (dataLength > 0 && data != NULL) {
@@ -248,10 +245,17 @@ static void init(void) {
 
     NSLog(@"JQTYPacketLog: Initializing hooks...");
 
-    // --- C 函数 Hook ---
-    MSHookFunction((void *)SSLRead, (void *)hooked_SSLRead, (void **)&orig_SSLRead);
-    MSHookFunction((void *)SSLWrite, (void *)hooked_SSLWrite, (void **)&orig_SSLWrite);
-    NSLog(@"JQTYPacketLog: SSLRead/SSLWrite hooked");
+    // --- SSLRead/SSLWrite (dlsym, avoid SDK26 declaration conflict) ---
+    void *sslReadPtr = dlsym(RTLD_DEFAULT, "SSLRead");
+    void *sslWritePtr = dlsym(RTLD_DEFAULT, "SSLWrite");
+    if (sslReadPtr) {
+        MSHookFunction(sslReadPtr, (void *)hooked_SSLRead, (void **)&orig_SSLRead);
+        NSLog(@"JQTYPacketLog: SSLRead hooked");
+    }
+    if (sslWritePtr) {
+        MSHookFunction(sslWritePtr, (void *)hooked_SSLWrite, (void **)&orig_SSLWrite);
+        NSLog(@"JQTYPacketLog: SSLWrite hooked");
+    }
 
     void *cccrypt_ptr = dlsym(RTLD_DEFAULT, "CCCrypt");
     if (cccrypt_ptr) {
