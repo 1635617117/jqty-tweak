@@ -41,7 +41,7 @@ jobs:
             -ObjC \
             -fobjc-arc \
             -fobjc-abi-version=2 \
-            -std=c++11 \
+            -x objective-c++ \
             -Wno-deprecated-declarations \
             -Wl,-U,_MSHookFunction \
             -Wl,-U,_MSHookMessageEx \
