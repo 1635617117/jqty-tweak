@@ -27,6 +27,7 @@ jobs:
             -framework Security \
             -framework CFNetwork \
             -framework UIKit \
+            -framework CoreGraphics \
             -lobjc \
             -ObjC \
             -fobjc-arc \
