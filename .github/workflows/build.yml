@@ -1,4 +1,4 @@
-name: Build IPA with injected dylib
+name: Build PacketLog IPA
 
 on:
   push:
@@ -9,77 +9,40 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout (with LFS for IPA)
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Compile dylib
+      - name: Compile App
         run: |
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          mkdir -p build
-          clang++ -arch arm64 \
+          mkdir -p build/Payload/PacketLog.app
+
+          clang -arch arm64 \
             -isysroot "$SDK" \
             -miphoneos-version-min=15.0 \
-            -dynamiclib \
             -F "$SDK/System/Library/Frameworks" \
-            -framework Foundation -framework Security -framework CFNetwork \
-            -framework UIKit -framework CoreGraphics \
-            -lobjc -ObjC -fobjc-arc -x objective-c++ \
-            -o build/JQTYPacketLog.dylib \
-            Tweak.mm
-          ls -la build/JQTYPacketLog.dylib
-          file build/JQTYPacketLog.dylib
+            -framework UIKit -framework Foundation -framework CFNetwork \
+            -fobjc-arc -ObjC \
+            -o build/Payload/PacketLog.app/JQTYApp \
+            main.m
 
-      - name: Unzip original IPA
-        run: |
-          unzip -q whale.ipa -d ipa_extracted
-          ls ipa_extracted/Payload/
-
-      - name: Copy dylib into .app bundle
-        run: |
-          APP=$(ls -d ipa_extracted/Payload/*.app)
-          cp build/JQTYPacketLog.dylib "$APP/JQTYPacketLog.dylib"
-          echo "APP=$APP" >> $GITHUB_ENV
-          echo "Dylib copied to $APP/"
-
-      - name: Build insert_dylib
-        run: |
-          git clone --depth 1 https://github.com/Tyilo/insert_dylib.git /tmp/insert_dylib
-          cd /tmp/insert_dylib
-          XCODE_APP=$(basename "$(xcode-select -p)")
-          XCODE_APP=${XCODE_APP%.app}
-          if [ "$XCODE_APP" = "CommandLineTools" ]; then
-            echo "Using available Xcode"
-          fi
-          clang -o insert_dylib insert_dylib.c -framework CoreFoundation
-          chmod +x insert_dylib
-          echo "insert_dylib built"
-
-      - name: Inject dylib into main binary
-        run: |
-          APP=$(echo "$APP")
-          EXEC=$(/usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$APP/Info.plist")
-          BINARY="$APP/$EXEC"
-          echo "Binary: $BINARY"
-          /tmp/insert_dylib/insert_dylib @executable_path/JQTYPacketLog.dylib "$BINARY" --all-yes
-          echo "Dylib injected!"
+          cp Info.plist build/Payload/PacketLog.app/
 
       - name: Sign with ldid
         run: |
           brew install ldid
-          ldid -S "$APP/JQTYPacketLog.dylib"
-          ldid -S "$APP/$EXEC"
-          echo "Signed"
+          ldid -S build/Payload/PacketLog.app/JQTYApp
 
       - name: Package IPA
         run: |
-          cd ipa_extracted
-          zip -qr ../whale_patched.ipa Payload/
+          cd build
+          zip -qr ../PacketLog.ipa Payload/
           cd ..
-          ls -la whale_patched.ipa
+          ls -la PacketLog.ipa
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: whale-patched-ipa
-          path: whale_patched.ipa
+          name: PacketLog-IPA
+          path: PacketLog.ipa
           if-no-files-found: error
