@@ -2,14 +2,22 @@
 #import <Security/Security.h>
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
-#import <dlfcn.h>
 
-extern "C" {
-void MSHookFunction(void *symbol, void *replace, void **result);
-void MSHookMessageEx(Class _class, SEL sel, IMP imp, IMP *result);
+// ========== 纯 ObjC Runtime Swizzling（不依赖 Cydia Substrate） ==========
+
+static IMP swizzleInstance(Class cls, SEL sel, IMP newImp) {
+    Method m = class_getInstanceMethod(cls, sel);
+    if (!m) return NULL;
+    return method_setImplementation(m, newImp);
 }
 
-// ========== 轻量级日志（直接同步写，不搞队列） ==========
+static IMP swizzleClass(Class cls, SEL sel, IMP newImp) {
+    Method m = class_getClassMethod(cls, sel);
+    if (!m) return NULL;
+    return method_setImplementation(m, newImp);
+}
+
+// ========== 日志 ==========
 #define LOG_PATH @"/var/mobile/Library/Logs/AppPacketLog.txt"
 
 static void slog(NSString *msg) {
@@ -23,24 +31,22 @@ static void slog(NSString *msg) {
             fh = [NSFileHandle fileHandleForWritingAtPath:LOG_PATH];
         }
         [fh seekToEndOfFile];
-        NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
-        fmt.dateFormat = @"HH:mm:ss";
-        NSString *line = [NSString stringWithFormat:@"[%@] %@\n",
-                          [fmt stringFromDate:[NSDate date]], msg];
-        [fh writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+        [fh writeData:[[NSString stringWithFormat:@"%@\n", msg] dataUsingEncoding:NSUTF8StringEncoding]];
         [fh closeFile];
     } @catch (...) {}
 }
 
-// ========== SSL Pinning 绕过 ==========
+// ========== DCAFSecurityPolicy 绕过 ==========
 
 static BOOL (*orig_DCAF_eval)(id, SEL, SecTrustRef, NSString *);
-static BOOL hooked_DCAF_eval(id self, SEL _cmd, SecTrustRef trust, NSString *domain) {
+static BOOL new_DCAF_eval(id self, SEL _cmd, SecTrustRef trust, NSString *domain) {
     return YES;
 }
 
+// ========== DCAFSecurityPolicy +policyWithPinningMode: 绕过 ==========
+
 static id (*orig_DCAF_policy)(Class, SEL, NSInteger);
-static id hooked_DCAF_policy(Class cls, SEL _cmd, NSInteger mode) {
+static id new_DCAF_policy(Class cls, SEL _cmd, NSInteger mode) {
     id p = orig_DCAF_policy(cls, _cmd, mode);
     @try {
         [p setValue:@YES forKey:@"allowInvalidCertificates"];
@@ -50,41 +56,52 @@ static id hooked_DCAF_policy(Class cls, SEL _cmd, NSInteger mode) {
     return p;
 }
 
+// ========== WPKAFSecurityPolicy 绕过 ==========
+
 static BOOL (*orig_WPKAF_eval)(id, SEL, SecTrustRef, NSString *);
-static BOOL hooked_WPKAF_eval(id self, SEL _cmd, SecTrustRef trust, NSString *domain) {
+static BOOL new_WPKAF_eval(id self, SEL _cmd, SecTrustRef trust, NSString *domain) {
     return YES;
 }
 
-// ========== 越狱检测绕过 ==========
-static BOOL (*orig_UM_jb)(Class, SEL);
-static BOOL hooked_UM_jb(Class cls, SEL _cmd) { return NO; }
+// ========== UMConfigure +isJailbreak 绕过 ==========
 
-// ========== 安全 Hook ==========
-static void tryHook(NSString *clsName, NSString *selName, IMP imp, IMP *orig, BOOL classMethod) {
-    Class cls = NSClassFromString(clsName);
-    if (!cls) return;
-    if (classMethod) cls = object_getClass(cls);
-    SEL sel = NSSelectorFromString(selName);
-    if (!sel) return;
-    MSHookMessageEx(cls, sel, imp, orig);
-}
+static BOOL (*orig_UM_jb)(Class, SEL);
+static BOOL new_UM_jb(Class cls, SEL _cmd) { return NO; }
 
 // ========== 入口 ==========
+
 __attribute__((constructor))
 static void init(void) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC),
                    dispatch_get_main_queue(), ^{
-        slog(@"JQTYPacketLog v4: SSL bypass only");
-        
-        tryHook(@"DCAFSecurityPolicy", @"evaluateServerTrust:forDomain:",
-                (IMP)hooked_DCAF_eval, (IMP *)&orig_DCAF_eval, NO);
-        tryHook(@"DCAFSecurityPolicy", @"policyWithPinningMode:",
-                (IMP)hooked_DCAF_policy, (IMP *)&orig_DCAF_policy, YES);
-        tryHook(@"WPKAFSecurityPolicy", @"evaluateServerTrust:forDomain:",
-                (IMP)hooked_WPKAF_eval, (IMP *)&orig_WPKAF_eval, NO);
-        tryHook(@"UMConfigure", @"isJailbreak",
-                (IMP)hooked_UM_jb, (IMP *)&orig_UM_jb, YES);
-        
-        slog(@"v4 hooks installed");
+        NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+        fmt.dateFormat = @"HH:mm:ss";
+        slog([NSString stringWithFormat:@"[%@] JQTYPacketLog v5 loaded (TrollStore, no Substrate)",
+              [fmt stringFromDate:[NSDate date]]]);
+
+        Class dcaf = NSClassFromString(@"DCAFSecurityPolicy");
+        if (dcaf) {
+            orig_DCAF_eval = (void *)swizzleInstance(dcaf, @selector(evaluateServerTrust:forDomain:),
+                                                      (IMP)new_DCAF_eval);
+            orig_DCAF_policy = (void *)swizzleClass(dcaf, @selector(policyWithPinningMode:),
+                                                     (IMP)new_DCAF_policy);
+            slog(@"DCAFSecurityPolicy bypassed");
+        }
+
+        Class wpk = NSClassFromString(@"WPKAFSecurityPolicy");
+        if (wpk) {
+            orig_WPKAF_eval = (void *)swizzleInstance(wpk, @selector(evaluateServerTrust:forDomain:),
+                                                       (IMP)new_WPKAF_eval);
+            slog(@"WPKAFSecurityPolicy bypassed");
+        }
+
+        Class um = NSClassFromString(@"UMConfigure");
+        if (um) {
+            orig_UM_jb = (void *)swizzleClass(um, @selector(isJailbreak),
+                                               (IMP)new_UM_jb);
+            slog(@"UMConfigure jailbreak bypassed");
+        }
+
+        slog(@"All hooks installed");
     });
 }
