@@ -98,12 +98,21 @@ typedef CCCryptorStatus (*CCCrypt_t)(CCOperation, CCAlgorithm, CCOptions,
     const void *, size_t, const void *, const void *, size_t, void *, size_t, size_t *);
 static CCCrypt_t orig_CCCrypt;
 
+// CCCrypt 防抖：每秒最多记录 5 条，防止高频调用撑爆队列
+static NSTimeInterval lastCCCryptTime = 0;
+static int cccryptCount = 0;
+
 static CCCryptorStatus hooked_CCCrypt(CCOperation op, CCAlgorithm alg, CCOptions opt,
     const void *key, size_t kLen, const void *iv, const void *in, size_t inLen,
     void *out, size_t outAvail, size_t *outMoved) {
     CCCryptorStatus ret = orig_CCCrypt(op, alg, opt, key, kLen, iv, in, inLen, out, outAvail, outMoved);
     if (ret == kCCSuccess && op == kCCDecrypt && out && outMoved && *outMoved > 0) {
-        writeToLog(@"CRYPT:DEC", [NSData dataWithBytesNoCopy:out length:*outMoved freeWhenDone:NO]);
+        NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
+        if (now - lastCCCryptTime > 1.0) { cccryptCount = 0; lastCCCryptTime = now; }
+        if (++cccryptCount <= 5) {
+            NSData *copy = [NSData dataWithBytes:out length:*outMoved];
+            writeToLog(@"CRYPT:DEC", copy);
+        }
     }
     return ret;
 }
