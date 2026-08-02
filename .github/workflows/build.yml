@@ -31,10 +31,6 @@ jobs:
             -ObjC \
             -fobjc-arc \
             -x objective-c++ \
-            -Wno-deprecated-declarations \
-            -Wl,-U,_MSHookFunction \
-            -Wl,-U,_MSHookMessageEx \
-            -Wl,-undefined,dynamic_lookup \
             -o build/JQTYPacketLog.dylib \
             Tweak.mm
           echo "=== Build done ==="
