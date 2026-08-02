@@ -67,7 +67,7 @@ static void wlog(NSString *tag, NSData *d) {
                                                          timeStyle:NSDateFormatterMediumStyle];
             NSString *header = [NSString stringWithFormat:@"[%@] %@ (%luB)\n", ts, tag, (unsigned long)copy.length];
             NSMutableString *hex = [NSMutableString string];
-            const uint8_t *b = copy.bytes;
+            const uint8_t *b = (const uint8_t *)copy.bytes;
             for (NSUInteger i = 0; i < copy.length; i += 16) {
                 [hex appendFormat:@"%04lx  ", (unsigned long)i];
                 for (NSUInteger j = 0; j < 16; j++) {
