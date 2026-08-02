@@ -38,16 +38,16 @@ static void slog(NSString *msg) {
 
 // ========== DCAFSecurityPolicy 绕过 ==========
 
-static BOOL (*orig_DCAF_eval)(id, SEL, SecTrustRef, NSString *);
+static IMP orig_DCAF_eval;
 static BOOL new_DCAF_eval(id self, SEL _cmd, SecTrustRef trust, NSString *domain) {
     return YES;
 }
 
 // ========== DCAFSecurityPolicy +policyWithPinningMode: 绕过 ==========
 
-static id (*orig_DCAF_policy)(Class, SEL, NSInteger);
+static IMP orig_DCAF_policy;
 static id new_DCAF_policy(Class cls, SEL _cmd, NSInteger mode) {
-    id p = orig_DCAF_policy(cls, _cmd, mode);
+    id p = ((id (*)(Class, SEL, NSInteger))orig_DCAF_policy)(cls, _cmd, mode);
     @try {
         [p setValue:@YES forKey:@"allowInvalidCertificates"];
         [p setValue:@NO forKey:@"validatesDomainName"];
@@ -58,14 +58,14 @@ static id new_DCAF_policy(Class cls, SEL _cmd, NSInteger mode) {
 
 // ========== WPKAFSecurityPolicy 绕过 ==========
 
-static BOOL (*orig_WPKAF_eval)(id, SEL, SecTrustRef, NSString *);
+static IMP orig_WPKAF_eval;
 static BOOL new_WPKAF_eval(id self, SEL _cmd, SecTrustRef trust, NSString *domain) {
     return YES;
 }
 
 // ========== UMConfigure +isJailbreak 绕过 ==========
 
-static BOOL (*orig_UM_jb)(Class, SEL);
+static IMP orig_UM_jb;
 static BOOL new_UM_jb(Class cls, SEL _cmd) { return NO; }
 
 // ========== 入口 ==========
@@ -81,24 +81,24 @@ static void init(void) {
 
         Class dcaf = NSClassFromString(@"DCAFSecurityPolicy");
         if (dcaf) {
-            orig_DCAF_eval = (void *)swizzleInstance(dcaf, @selector(evaluateServerTrust:forDomain:),
-                                                      (IMP)new_DCAF_eval);
-            orig_DCAF_policy = (void *)swizzleClass(dcaf, @selector(policyWithPinningMode:),
-                                                     (IMP)new_DCAF_policy);
+            orig_DCAF_eval = swizzleInstance(dcaf, @selector(evaluateServerTrust:forDomain:),
+                                              (IMP)new_DCAF_eval);
+            orig_DCAF_policy = swizzleClass(dcaf, @selector(policyWithPinningMode:),
+                                             (IMP)new_DCAF_policy);
             slog(@"DCAFSecurityPolicy bypassed");
         }
 
         Class wpk = NSClassFromString(@"WPKAFSecurityPolicy");
         if (wpk) {
-            orig_WPKAF_eval = (void *)swizzleInstance(wpk, @selector(evaluateServerTrust:forDomain:),
-                                                       (IMP)new_WPKAF_eval);
+            orig_WPKAF_eval = swizzleInstance(wpk, @selector(evaluateServerTrust:forDomain:),
+                                               (IMP)new_WPKAF_eval);
             slog(@"WPKAFSecurityPolicy bypassed");
         }
 
         Class um = NSClassFromString(@"UMConfigure");
         if (um) {
-            orig_UM_jb = (void *)swizzleClass(um, @selector(isJailbreak),
-                                               (IMP)new_UM_jb);
+            orig_UM_jb = swizzleClass(um, @selector(isJailbreak),
+                                       (IMP)new_UM_jb);
             slog(@"UMConfigure jailbreak bypassed");
         }
 
